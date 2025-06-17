@@ -7,7 +7,7 @@ from duckduckgo_search import DDGS
 from telegram import Bot
 
 # موضوعی که می‌خواهید هوش مصنوعی در مورد آن تحقیق کند
-RESEARCH_TOPIC = "جدیدترین دستاوردهای علمی در حوزه فضا"
+RESEARCH_TOPIC = "اخبار روز ایران"
 
 # --- مدل‌های هوش مصنوعی از HuggingFace (پلن رایگان) ---
 # برای خلاصه‌سازی
