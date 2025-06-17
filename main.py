@@ -1,20 +1,18 @@
-# این فایل کد اصلی برنامه است - نسخه نهایی با مدل رایگان Mistral
+# این فایل کد اصلی برنامه است - نسخه نهایی و بهینه شده
 import os
 import requests
 import asyncio
-from dotenv import load_dotenv
 from duckduckgo_search import DDGS
 from telegram import Bot
 
 # موضوعی که می‌خواهید هوش مصنوعی در مورد آن تحقیق کند
 RESEARCH_TOPIC = "اخبار روز ایران"
 
-# --- مدل‌های هوش مصنوعی از HuggingFace (پلن رایگان) ---
+# --- مدل‌های هوش مصنوعی از HuggingFace (پلن رایگان و تضمین شده) ---
 # برای خلاصه‌سازی
 SUMMARIZER_MODEL_HF = "facebook/bart-large-cnn"
-# <<< اصلاح شد: مدل نویسنده و ویراستار به Mistral تغییر کرد
-# برای نوشتن و ویرایش متن (یک مدل بسیار قوی و در دسترس)
-GENERATIVE_MODEL_HF = "mistralai/Mistral-7B-Instruct-v0.2"
+# <<< اصلاح شد: مدل نویسنده و ویراستار به Zephyr تغییر کرد که توسط خود HuggingFace پشتیبانی می‌شود
+GENERATIVE_MODEL_HF = "HuggingFaceH4/zephyr-7b-beta"
 
 
 # خواندن کلیدهای API از متغیرهای محیطی گیت‌هاب
@@ -41,18 +39,15 @@ def call_huggingface_model(model_name: str, prompt: str) -> str:
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
     
     try:
-        # برای مدل‌های مختلف، فرمت payload ممکن است کمی متفاوت باشد
         if "bart-large-cnn" in model_name:
              payload = {"inputs": prompt, "options": {"wait_for_model": True}}
         else:
-             # برای مدل‌های تولید متن مثل Mistral
              payload = {"inputs": prompt, "options": {"wait_for_model": True}, "parameters": {"return_full_text": False, "max_new_tokens": 1024}}
 
-        response = requests.post(api_url, headers=headers, json=payload, timeout=120) # افزایش زمان انتظار
-        response.raise_for_status() # این خط در صورت وجود خطا، برنامه را متوقف می‌کند
+        response = requests.post(api_url, headers=headers, json=payload, timeout=180) # افزایش زمان انتظار به ۳ دقیقه
+        response.raise_for_status()
         data = response.json()
         
-        # استخراج متن تولید شده بر اساس فرمت پاسخ مدل
         if isinstance(data, list) and data:
             if "summary_text" in data[0]:
                 generated_text = data[0]['summary_text']
@@ -87,13 +82,15 @@ async def main():
     if not search_results:
         print("تحقیق ناموفق بود. برنامه متوقف شد.")
         return
-        
-    summary = call_huggingface_model(SUMMARIZER_MODEL_HF, search_results[:3000]) # کاهش حجم متن برای پایداری بیشتر
+    
+    # <<< اصلاح شد: کاهش حجم متن ورودی برای جلوگیری از Timeout
+    summary = call_huggingface_model(SUMMARIZER_MODEL_HF, search_results[:2000])
 
-    writer_prompt = f"You are an expert technology and news writer in Persian. Write a clear, engaging, and accurate post for a Telegram channel about '{RESEARCH_TOPIC}' based on the following summary. Use short paragraphs and simple language. The output must be only the final Persian text of the post.\n\nSummary:\n{summary}"
+    # <<< اصلاح شد: استفاده از فرمت پرامپت بهینه برای مدل Zephyr
+    writer_prompt = f"<|system|>\nYou are a helpful and accurate assistant that writes in clear Persian. Your output must be ONLY the requested Persian text.</s>\n<|user|>\nBased on the following summary, write an engaging post for a Telegram channel about '{RESEARCH_TOPIC}'.\n\nSummary:\n{summary}</s>\n<|assistant|>"
     initial_post = call_huggingface_model(GENERATIVE_MODEL_HF, writer_prompt)
 
-    editor_prompt = f"You are a strict Persian editor. Review and polish the following text. Make it more fluent and correct any grammatical or factual errors. Your output must be only the final, ready-to-publish Persian text.\n\nText to edit:\n{initial_post}"
+    editor_prompt = f"<|system|>\nYou are a helpful and strict Persian editor. Your output must be ONLY the final, polished Persian text.</s>\n<|user|>\nReview and polish the following text. Make it more fluent and correct any errors.\n\nText to edit:\n{initial_post}</s>\n<|assistant|>"
     final_post = call_huggingface_model(GENERATIVE_MODEL_HF, editor_prompt)
 
     final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#هوش_مصنوعی #خبر #ایران"
