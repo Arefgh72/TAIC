@@ -101,7 +101,7 @@ async def main():
     editor_user_prompt = f"این متن را ویرایش و نهایی کن: \n\n{initial_post}"
     final_post = call_replicate_model(EDITOR_MODEL_REPLICATE, editor_system_prompt, editor_user_prompt)
 
-    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#هوش_مصنوعی #تکنولوژی #علم"
+    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#ایران #اخبار روز #علم"
     await send_to_telegram(final_telegram_message)
 
 if __name__ == "__main__":
