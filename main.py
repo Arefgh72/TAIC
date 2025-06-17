@@ -1,4 +1,4 @@
-# این فایل کد اصلی برنامه است - نسخه رایگان با Hugging Face
+# این فایل کد اصلی برنامه است - نسخه نهایی با مدل رایگان Mistral
 import os
 import requests
 import asyncio
@@ -12,10 +12,10 @@ RESEARCH_TOPIC = "اخبار روز ایران"
 # --- مدل‌های هوش مصنوعی از HuggingFace (پلن رایگان) ---
 # برای خلاصه‌سازی
 SUMMARIZER_MODEL_HF = "facebook/bart-large-cnn"
-# برای نوشتن متن (یک مدل قدرتمند و رایگان)
-WRITER_MODEL_HF = "google/gemma-7b-it"
-# برای ویرایش متن (می‌توانیم از همان مدل نویسنده استفاده کنیم)
-EDITOR_MODEL_HF = "google/gemma-7b-it"
+# <<< اصلاح شد: مدل نویسنده و ویراستار به Mistral تغییر کرد
+# برای نوشتن و ویرایش متن (یک مدل بسیار قوی و در دسترس)
+GENERATIVE_MODEL_HF = "mistralai/Mistral-7B-Instruct-v0.2"
+
 
 # خواندن کلیدهای API از متغیرهای محیطی گیت‌هاب
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -34,7 +34,6 @@ def research(topic: str, num_results: int = 5) -> str:
         print(f"❌ خطا در حین جستجو: {e}")
         return ""
 
-# <<< تغییر: این تابع جایگزین تمام مدل‌ها شده است
 def call_huggingface_model(model_name: str, prompt: str) -> str:
     """یک مدل را از طریق Hugging Face API فراخوانی می‌کند."""
     print(f"🤗 در حال فراخوانی مدل Hugging Face: {model_name}...")
@@ -46,10 +45,11 @@ def call_huggingface_model(model_name: str, prompt: str) -> str:
         if "bart-large-cnn" in model_name:
              payload = {"inputs": prompt, "options": {"wait_for_model": True}}
         else:
+             # برای مدل‌های تولید متن مثل Mistral
              payload = {"inputs": prompt, "options": {"wait_for_model": True}, "parameters": {"return_full_text": False, "max_new_tokens": 1024}}
 
-        response = requests.post(api_url, headers=headers, json=payload)
-        response.raise_for_status()
+        response = requests.post(api_url, headers=headers, json=payload, timeout=120) # افزایش زمان انتظار
+        response.raise_for_status() # این خط در صورت وجود خطا، برنامه را متوقف می‌کند
         data = response.json()
         
         # استخراج متن تولید شده بر اساس فرمت پاسخ مدل
@@ -88,19 +88,15 @@ async def main():
         print("تحقیق ناموفق بود. برنامه متوقف شد.")
         return
         
-    summary = call_huggingface_model(SUMMARIZER_MODEL_HF, search_results[:4000])
+    summary = call_huggingface_model(SUMMARIZER_MODEL_HF, search_results[:3000]) # کاهش حجم متن برای پایداری بیشتر
 
-    writer_prompt = f"شما یک نویسنده متخصص علم و فناوری به زبان فارسی هستید. بر اساس این خلاصه، یک پست جذاب و خوانا برای یک کانال تلگرامی در مورد '{RESEARCH_TOPIC}' بنویس:\n\n{summary}"
-    initial_post = call_huggingface_model(WRITER_MODEL_HF, writer_prompt)
+    writer_prompt = f"You are an expert technology and news writer in Persian. Write a clear, engaging, and accurate post for a Telegram channel about '{RESEARCH_TOPIC}' based on the following summary. Use short paragraphs and simple language. The output must be only the final Persian text of the post.\n\nSummary:\n{summary}"
+    initial_post = call_huggingface_model(GENERATIVE_MODEL_HF, writer_prompt)
 
-    editor_prompt = f"شما یک ویراستار دقیق به زبان فارسی هستید. این متن را بازبینی و روان‌تر کن و اگر نیاز بود، اشتباهاتش را اصلاح کن. خروجی شما فقط باید متن نهایی و آماده انتشار باشد:\n\n{initial_post}"
-    final_post = call_huggingface_model(EDITOR_MODEL_HF, editor_prompt)
-    
-    # گاهی مدل gemma پرامپت را در خروجی تکرار می‌کند، این کد آن را تمیز می‌کند
-    if final_post.strip().startswith(editor_prompt.strip()):
-        final_post = final_post.replace(editor_prompt, "").strip()
+    editor_prompt = f"You are a strict Persian editor. Review and polish the following text. Make it more fluent and correct any grammatical or factual errors. Your output must be only the final, ready-to-publish Persian text.\n\nText to edit:\n{initial_post}"
+    final_post = call_huggingface_model(GENERATIVE_MODEL_HF, editor_prompt)
 
-    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#هوش_مصنوعی #تکنولوژی #علم"
+    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#هوش_مصنوعی #خبر #ایران"
     await send_to_telegram(final_telegram_message)
 
 if __name__ == "__main__":
