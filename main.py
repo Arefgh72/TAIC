@@ -1,4 +1,4 @@
-# این فایل کد اصلی برنامه است - نسخه نهایی و بهینه شده
+# این فایل کد اصلی برنامه است - نسخه نهایی با رفع خطای تلگرام
 import os
 import requests
 import asyncio
@@ -9,9 +9,7 @@ from telegram import Bot
 RESEARCH_TOPIC = "اخبار روز ایران"
 
 # --- مدل‌های هوش مصنوعی از HuggingFace (پلن رایگان و تضمین شده) ---
-# برای خلاصه‌سازی
 SUMMARIZER_MODEL_HF = "facebook/bart-large-cnn"
-# <<< اصلاح شد: مدل نویسنده و ویراستار به Zephyr تغییر کرد که توسط خود HuggingFace پشتیبانی می‌شود
 GENERATIVE_MODEL_HF = "HuggingFaceH4/zephyr-7b-beta"
 
 
@@ -44,7 +42,7 @@ def call_huggingface_model(model_name: str, prompt: str) -> str:
         else:
              payload = {"inputs": prompt, "options": {"wait_for_model": True}, "parameters": {"return_full_text": False, "max_new_tokens": 1024}}
 
-        response = requests.post(api_url, headers=headers, json=payload, timeout=180) # افزایش زمان انتظار به ۳ دقیقه
+        response = requests.post(api_url, headers=headers, json=payload, timeout=180) 
         response.raise_for_status()
         data = response.json()
         
@@ -72,7 +70,8 @@ async def send_to_telegram(message: str):
         return
     try:
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message, parse_mode='Markdown')
+        # <<< اصلاح شد: حذف parse_mode='Markdown' برای جلوگیری از خطا و تضمین ارسال
+        await bot.send_message(chat_id=TELEGRAM_CHANNEL_ID, text=message)
         print("✅ پست با موفقیت در کانال تلگرام منتشر شد!")
     except Exception as e:
         print(f"❌ خطا در ارسال به تلگرام: {e}")
@@ -83,17 +82,16 @@ async def main():
         print("تحقیق ناموفق بود. برنامه متوقف شد.")
         return
     
-    # <<< اصلاح شد: کاهش حجم متن ورودی برای جلوگیری از Timeout
     summary = call_huggingface_model(SUMMARIZER_MODEL_HF, search_results[:2000])
 
-    # <<< اصلاح شد: استفاده از فرمت پرامپت بهینه برای مدل Zephyr
     writer_prompt = f"<|system|>\nYou are a helpful and accurate assistant that writes in clear Persian. Your output must be ONLY the requested Persian text.</s>\n<|user|>\nBased on the following summary, write an engaging post for a Telegram channel about '{RESEARCH_TOPIC}'.\n\nSummary:\n{summary}</s>\n<|assistant|>"
     initial_post = call_huggingface_model(GENERATIVE_MODEL_HF, writer_prompt)
 
     editor_prompt = f"<|system|>\nYou are a helpful and strict Persian editor. Your output must be ONLY the final, polished Persian text.</s>\n<|user|>\nReview and polish the following text. Make it more fluent and correct any errors.\n\nText to edit:\n{initial_post}</s>\n<|assistant|>"
     final_post = call_huggingface_model(GENERATIVE_MODEL_HF, editor_prompt)
 
-    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#هوش_مصنوعی #خبر #ایران"
+    # <<< اصلاح شد: حذف ** از دور عنوان چون دیگر از Markdown استفاده نمی‌کنیم
+    final_telegram_message = f"{RESEARCH_TOPIC}\n\n{final_post}\n\n#هوش_مصنوعی #خبر #ایران"
     await send_to_telegram(final_telegram_message)
 
 if __name__ == "__main__":
