@@ -12,8 +12,10 @@ from telegram import Bot
 RESEARCH_TOPIC = "اخبار روز و مهم ایران"
 
 # مدل‌های هوش مصنوعی
-WRITER_MODEL_REPLICATE = "meta/llama-3-70b-instruct"
-EDITOR_MODEL_REPLICATE = "mistralai/mistral-7b-instruct-v0.2"
+# <<< اصلاح شد: نام مدل دقیق‌تر شد
+WRITER_MODEL_REPLICATE = "meta/meta-llama-3-70b-instruct"
+# <<< اصلاح شد: به یک مدل قوی و قابل اعتماد تغییر کرد
+EDITOR_MODEL_REPLICATE = "mistralai/mixtral-8x7b-instruct-v0.1"
 SUMMARIZER_MODEL_HF = "facebook/bart-large-cnn"
 
 # خواندن کلیدهای API از متغیرهای محیطی که در گیت‌هاب تنظیم می‌کنیم
