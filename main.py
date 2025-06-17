@@ -1,6 +1,5 @@
-# این فایل کد اصلی برنامه است
+# این فایل کد اصلی برنامه است - نسخه رایگان با Hugging Face
 import os
-import replicate
 import requests
 import asyncio
 from dotenv import load_dotenv
@@ -8,24 +7,20 @@ from duckduckgo_search import DDGS
 from telegram import Bot
 
 # موضوعی که می‌خواهید هوش مصنوعی در مورد آن تحقیق کند
-# برای تغییر موضوع، فقط متن داخل " " را در خط بعدی عوض کنید
-RESEARCH_TOPIC = "اخبار روز و مهم ایران"
+RESEARCH_TOPIC = "جدیدترین دستاوردهای علمی در حوزه فضا"
 
-# مدل‌های هوش مصنوعی
-# <<< اصلاح شد: نام مدل دقیق‌تر شد
-WRITER_MODEL_REPLICATE = "meta/meta-llama-3-70b-instruct"
-# <<< اصلاح شد: به یک مدل قوی و قابل اعتماد تغییر کرد
-EDITOR_MODEL_REPLICATE = "mistralai/mixtral-8x7b-instruct-v0.1"
+# --- مدل‌های هوش مصنوعی از HuggingFace (پلن رایگان) ---
+# برای خلاصه‌سازی
 SUMMARIZER_MODEL_HF = "facebook/bart-large-cnn"
+# برای نوشتن متن (یک مدل قدرتمند و رایگان)
+WRITER_MODEL_HF = "google/gemma-7b-it"
+# برای ویرایش متن (می‌توانیم از همان مدل نویسنده استفاده کنیم)
+EDITOR_MODEL_HF = "google/gemma-7b-it"
 
-# خواندن کلیدهای API از متغیرهای محیطی که در گیت‌هاب تنظیم می‌کنیم
+# خواندن کلیدهای API از متغیرهای محیطی گیت‌هاب
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 HUGGINGFACE_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
-
-# تنظیم کلید Replicate
-os.environ["REPLICATE_API_TOKEN"] = REPLICATE_API_TOKEN
 
 def research(topic: str, num_results: int = 5) -> str:
     print(f"🕵️  مامور محقق: در حال جستجو در مورد '{topic}'...")
@@ -39,39 +34,41 @@ def research(topic: str, num_results: int = 5) -> str:
         print(f"❌ خطا در حین جستجو: {e}")
         return ""
 
-def call_replicate_model(model_name: str, system_prompt: str, user_prompt: str) -> str:
-    print(f"🧠 در حال فراخوانی مدل Replicate: {model_name}...")
-    try:
-        output = replicate.run(
-            model_name,
-            input={
-                "prompt": user_prompt,
-                "system_prompt": system_prompt,
-                "max_new_tokens": 2048
-            }
-        )
-        result = "".join(output)
-        print("✅ پاسخ از Replicate دریافت شد.")
-        return result
-    except Exception as e:
-        print(f"❌ خطای Replicate: {e}")
-        return f"خطا در ارتباط با مدل {model_name}"
-
-def call_huggingface_summarizer(text_to_summarize: str, model_name: str) -> str:
+# <<< تغییر: این تابع جایگزین تمام مدل‌ها شده است
+def call_huggingface_model(model_name: str, prompt: str) -> str:
+    """یک مدل را از طریق Hugging Face API فراخوانی می‌کند."""
     print(f"🤗 در حال فراخوانی مدل Hugging Face: {model_name}...")
+    api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+    headers = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
+    
     try:
-        api_url = f"https://api-inference.huggingface.co/models/{model_name}"
-        headers = {"Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}"}
-        
-        response = requests.post(api_url, headers=headers, json={"inputs": text_to_summarize, "options": {"wait_for_model": True}})
+        # برای مدل‌های مختلف، فرمت payload ممکن است کمی متفاوت باشد
+        if "bart-large-cnn" in model_name:
+             payload = {"inputs": prompt, "options": {"wait_for_model": True}}
+        else:
+             payload = {"inputs": prompt, "options": {"wait_for_model": True}, "parameters": {"return_full_text": False, "max_new_tokens": 1024}}
+
+        response = requests.post(api_url, headers=headers, json=payload)
         response.raise_for_status()
+        data = response.json()
         
-        summary = response.json()[0]['summary_text']
-        print("✅ خلاصه از Hugging Face دریافت شد.")
-        return summary
+        # استخراج متن تولید شده بر اساس فرمت پاسخ مدل
+        if isinstance(data, list) and data:
+            if "summary_text" in data[0]:
+                generated_text = data[0]['summary_text']
+            elif "generated_text" in data[0]:
+                generated_text = data[0]['generated_text']
+            else:
+                generated_text = str(data)
+        else:
+            generated_text = "پاسخی از مدل دریافت نشد."
+
+        print("✅ پاسخ از Hugging Face دریافت شد.")
+        return generated_text
     except Exception as e:
         print(f"❌ خطای Hugging Face: {e}")
-        return "خطا در خلاصه‌سازی متن."
+        return f"خطا در ارتباط با مدل {model_name}"
+
 
 async def send_to_telegram(message: str):
     print("📤 مامور ناشر: در حال ارسال پست به تلگرام...")
@@ -91,17 +88,19 @@ async def main():
         print("تحقیق ناموفق بود. برنامه متوقف شد.")
         return
         
-    summary = call_huggingface_summarizer(search_results[:4000], SUMMARIZER_MODEL_HF)
+    summary = call_huggingface_model(SUMMARIZER_MODEL_HF, search_results[:4000])
 
-    writer_system_prompt = "شما یک نویسنده متخصص علم و فناوری به زبان فارسی هستید. وظیفه شما این است که بر اساس اطلاعات داده شده، یک پست جذاب، دقیق و خوانا برای یک کانال تلگرامی بنویسید. از پاراگراف‌های کوتاه و زبان ساده استفاده کنید."
-    writer_user_prompt = f"بر اساس این خلاصه، یک پست کامل در مورد '{RESEARCH_TOPIC}' بنویس: \n\n{summary}"
-    initial_post = call_replicate_model(WRITER_MODEL_REPLICATE, writer_system_prompt, writer_user_prompt)
+    writer_prompt = f"شما یک نویسنده متخصص علم و فناوری به زبان فارسی هستید. بر اساس این خلاصه، یک پست جذاب و خوانا برای یک کانال تلگرامی در مورد '{RESEARCH_TOPIC}' بنویس:\n\n{summary}"
+    initial_post = call_huggingface_model(WRITER_MODEL_HF, writer_prompt)
 
-    editor_system_prompt = "شما یک ویراستار دقیق و سخت‌گیر به زبان فارسی هستید. متنی که به شما داده می‌شود را بازبینی کنید. اشتباهات گرامری و علمی را اصلاح کنید، جمله‌بندی را روان‌تر کنید و در صورت نیاز، عنوان جذاب‌تری برای آن پیشنهاد دهید. خروجی شما فقط باید متن نهایی و آماده انتشار باشد."
-    editor_user_prompt = f"این متن را ویرایش و نهایی کن: \n\n{initial_post}"
-    final_post = call_replicate_model(EDITOR_MODEL_REPLICATE, editor_system_prompt, editor_user_prompt)
+    editor_prompt = f"شما یک ویراستار دقیق به زبان فارسی هستید. این متن را بازبینی و روان‌تر کن و اگر نیاز بود، اشتباهاتش را اصلاح کن. خروجی شما فقط باید متن نهایی و آماده انتشار باشد:\n\n{initial_post}"
+    final_post = call_huggingface_model(EDITOR_MODEL_HF, editor_prompt)
+    
+    # گاهی مدل gemma پرامپت را در خروجی تکرار می‌کند، این کد آن را تمیز می‌کند
+    if final_post.strip().startswith(editor_prompt.strip()):
+        final_post = final_post.replace(editor_prompt, "").strip()
 
-    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#ایران #اخبار روز #علم"
+    final_telegram_message = f"**{RESEARCH_TOPIC}**\n\n{final_post}\n\n#هوش_مصنوعی #تکنولوژی #علم"
     await send_to_telegram(final_telegram_message)
 
 if __name__ == "__main__":
