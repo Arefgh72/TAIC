@@ -9,7 +9,7 @@ from telegram import Bot
 
 # موضوعی که می‌خواهید هوش مصنوعی در مورد آن تحقیق کند
 # برای تغییر موضوع، فقط متن داخل " " را در خط بعدی عوض کنید
-RESEARCH_TOPIC = "شگفتی‌های هوش مصنوعی در سال ۲۰۲۵"
+RESEARCH_TOPIC = "اخبار روز و مهم ایران"
 
 # مدل‌های هوش مصنوعی
 WRITER_MODEL_REPLICATE = "meta/llama-3-70b-instruct"
