@@ -1,0 +1,7 @@
+python-telegram-bot
+replicate
+huggingface_hub
+python-dotenv
+duckduckgo-search
+requests
+asyncio
